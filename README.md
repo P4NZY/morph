@@ -86,7 +86,8 @@ Output is capped at 120 megapixels.
 - `desktop.py`: the Morph.app entry point (native window via pywebview)
 - `mac_window.py`: the native macOS toolbar (Convert | Upscale) and Show in Finder
 - `selftest.py`: automated end-to-end test of the app window (`MORPH_SELFTEST=<dir>`)
-- `packaging/`: icon, PyInstaller recipe (`Morph.spec`) and `build_app.sh`
+- `packaging/`: app icon (built from `icon-art.webp` by `make_icon.py`), PyInstaller recipe
+  (`Morph.spec`) and `build_app.sh`
 
 AI models live in `~/Library/Application Support/Morph/models`, shared by the app and
 `start.command`.
