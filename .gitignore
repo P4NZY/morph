@@ -1,0 +1,20 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Builds (packaging/build_app.sh)
+packaging/build/
+packaging/dist/
+packaging/build.log
+*.app
+
+# AI model weights are downloaded at runtime into ~/Library/Application Support/Morph
+models/
+*.pth
+
+# macOS / editors
+.DS_Store
+.claude/
+.vscode/
+.idea/

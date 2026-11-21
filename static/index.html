@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Morph</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%235b5ce6'/><path d='M8 22l6-11 4 7 2-3 4 7z' fill='white'/></svg>">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <!-- Shown in a browser only; Morph.app uses a native macOS toolbar instead. -->
+  <header class="web-toolbar">
+    <div class="web-toolbar-title">Morph</div>
+    <div class="segmented" id="web-tabs" role="tablist" aria-label="Tool">
+      <button role="tab" data-tab="convert" aria-selected="true" class="is-on">Convert</button>
+      <button role="tab" data-tab="upscale" aria-selected="false">Upscale</button>
+    </div>
+    <div class="web-toolbar-end"></div>
+  </header>
+
+  <main>
+    <div class="drop-overlay" aria-hidden="true"><span id="drop-overlay-text">Drop to Convert</span></div>
+
+    <!-- ============================== CONVERT ============================== -->
+    <section class="panel convert is-active" id="panel-convert" role="tabpanel" aria-label="Convert">
+      <div class="convert-column is-empty" id="c-column">
+
+        <div class="dropzone" id="c-drop">
+          <svg class="dropzone-symbol" viewBox="0 0 48 48" aria-hidden="true">
+            <path d="M14 6.5h13.5L36 15v23.5a3 3 0 0 1-3 3H14a3 3 0 0 1-3-3v-29a3 3 0 0 1 3-3z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+            <path d="M27 6.5V13a2.5 2.5 0 0 0 2.5 2.5H36" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+            <path d="M23.5 22v12m0 0-4.5-4.5m4.5 4.5 4.5-4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <h1 class="dropzone-title">Drop a file to convert</h1>
+          <p class="dropzone-text">Images, PDFs, documents, spreadsheets, audio and video</p>
+          <button class="push" id="c-choose">Choose File…</button>
+          <input type="file" id="c-input" hidden>
+        </div>
+
+        <div class="form is-hidden" id="c-form">
+          <h2 class="group-title">Source</h2>
+          <div class="group">
+            <div class="row file-row">
+              <span class="doc-icon" id="c-src-icon" aria-hidden="true"></span>
+              <div class="file-text">
+                <div class="file-name" id="c-name"></div>
+                <div class="file-meta" id="c-meta"></div>
+              </div>
+              <button class="push small" id="c-change">Choose…</button>
+            </div>
+          </div>
+
+          <h2 class="group-title">Convert To</h2>
+          <div class="group">
+            <label class="row">
+              <span class="row-label">Format</span>
+              <select id="c-format"></select>
+            </label>
+          </div>
+          <p class="footnote" id="c-note"></p>
+          <p class="footnote warning is-hidden" id="c-unsupported"></p>
+
+          <div class="is-hidden" id="c-result">
+            <h2 class="group-title">Result</h2>
+            <div class="group">
+              <div class="row file-row">
+                <span class="doc-icon" id="c-out-icon" aria-hidden="true"></span>
+                <div class="file-text">
+                  <div class="file-name" id="c-result-name"></div>
+                  <div class="file-meta">
+                    <span id="c-result-meta"></span>
+                    <button class="link is-hidden" id="c-reveal">Show in Finder</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="actions">
+            <div class="activity" id="c-activity" aria-live="polite">
+              <progress id="c-progress" class="is-hidden"></progress>
+              <span class="activity-text" id="c-status"></span>
+            </div>
+            <button class="push default" id="c-go">Convert</button>
+            <a class="push default is-hidden" id="c-download" href="#" download>Download</a>
+          </div>
+        </div>
+
+        <details class="formats">
+          <summary>Supported Formats</summary>
+          <div id="c-matrix"></div>
+        </details>
+      </div>
+    </section>
+
+    <!-- ============================== UPSCALE ============================== -->
+    <section class="panel upscale" id="panel-upscale" role="tabpanel" aria-label="Upscale">
+      <div class="canvas" id="u-canvas">
+        <div class="dropzone" id="u-drop">
+          <svg class="dropzone-symbol" viewBox="0 0 48 48" aria-hidden="true">
+            <rect x="6.5" y="10" width="35" height="28" rx="4" fill="none" stroke="currentColor" stroke-width="2"/>
+            <circle cx="17" cy="19.5" r="3" fill="none" stroke="currentColor" stroke-width="2"/>
+            <path d="M7 33l9.5-8.5 6.5 5.5 7-7 11 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+          </svg>
+          <h1 class="dropzone-title">Drop an image to upscale</h1>
+          <p class="dropzone-text">PNG, JPEG, HEIC, WebP, TIFF, GIF and more</p>
+          <button class="push" id="u-choose">Choose Image…</button>
+          <input type="file" id="u-input" accept="image/*,.heic,.heif,.avif,.tif,.tiff" hidden>
+        </div>
+
+        <div class="stage is-hidden" id="u-stage">
+          <div class="stage-area" id="u-stage-area">
+            <div class="preview" id="u-preview">
+              <img id="u-img" alt="">
+              <div class="crop" id="u-crop" hidden><span class="crop-label" id="u-crop-label"></span></div>
+            </div>
+            <div class="compare is-hidden" id="u-compare">
+              <div class="compare-layer"><div class="compare-stage" id="u-stage-before"><img id="u-before" alt="Original"></div></div>
+              <div class="compare-layer compare-after"><div class="compare-stage" id="u-stage-after"><img id="u-after" alt="Upscaled"></div></div>
+              <div class="compare-divider" id="u-divider" role="slider" tabindex="0" aria-label="Compare original and upscaled" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"><span></span></div>
+              <span class="compare-tag left">Original</span>
+              <span class="compare-tag right" id="u-after-tag">Upscaled</span>
+            </div>
+          </div>
+          <div class="stage-bar">
+            <div class="stage-info" id="u-info"></div>
+            <div class="segmented small is-hidden" id="u-view">
+              <button data-view="preview" class="is-on">Image</button>
+              <button data-view="compare">Compare at 100%</button>
+            </div>
+            <button class="push small" id="u-change">Choose…</button>
+          </div>
+        </div>
+      </div>
+
+      <aside class="inspector" aria-label="Upscale settings">
+        <h2 class="group-title">Size</h2>
+        <div class="group">
+          <label class="row">
+            <span class="row-label">Preset</span>
+            <select id="u-preset">
+              <option value="custom">Custom</option>
+              <optgroup label="Scale">
+                <option value="x2">200%</option>
+                <option value="x4">400%</option>
+              </optgroup>
+              <optgroup label="Screen Size">
+                <option value="4k">4K UHD — 3840 × 2160</option>
+                <option value="mba13">MacBook Air 13″ — 2560 × 1664</option>
+                <option value="mba15">MacBook Air 15″ — 2880 × 1864</option>
+              </optgroup>
+            </select>
+          </label>
+          <div class="row slider-row">
+            <label class="row-label" for="u-slider">Scale</label>
+            <input type="range" id="u-slider" min="0" max="300" step="1" value="100" list="u-ticks">
+            <output class="row-value" id="u-scale-out" for="u-slider">200%</output>
+            <datalist id="u-ticks">
+              <option value="0"></option><option value="100"></option><option value="200"></option><option value="300"></option>
+            </datalist>
+          </div>
+          <label class="row is-hidden" id="u-fit-row">
+            <span class="row-label">Fit</span>
+            <select id="u-fit">
+              <option value="fill">Fill and Crop</option>
+              <option value="fit">Fit Inside</option>
+              <option value="stretch">Stretch</option>
+            </select>
+          </label>
+          <div class="row">
+            <span class="row-label">New Size</span>
+            <span class="row-value" id="u-size">—</span>
+          </div>
+        </div>
+        <p class="footnote" id="u-fit-note"></p>
+
+        <h2 class="group-title">Quality</h2>
+        <div class="group">
+          <label class="row">
+            <span class="row-label">Method</span>
+            <select id="u-method">
+              <option value="standard">Standard</option>
+              <option value="photo">AI — Photo</option>
+              <option value="art">AI — Art</option>
+            </select>
+          </label>
+          <label class="row" id="u-sharpen-row">
+            <span class="row-label">Sharpen details</span>
+            <input type="checkbox" id="u-sharpen" checked>
+          </label>
+          <div class="row model-row is-hidden" id="u-model">
+            <div class="model-text">
+              <div id="u-model-name">AI Model</div>
+              <div class="file-meta" id="u-model-meta"></div>
+              <progress id="u-model-progress" class="is-hidden" max="1" value="0"></progress>
+            </div>
+            <button class="push small" id="u-model-get">Download</button>
+          </div>
+        </div>
+        <p class="footnote" id="u-method-note"></p>
+
+        <h2 class="group-title">Output</h2>
+        <div class="group">
+          <label class="row">
+            <span class="row-label">Format</span>
+            <select id="u-format">
+              <option value="png">PNG</option>
+              <option value="jpg">JPEG</option>
+              <option value="webp">WebP</option>
+            </select>
+          </label>
+        </div>
+        <p class="footnote warning is-hidden" id="u-warn"></p>
+
+        <div class="is-hidden" id="u-result">
+          <h2 class="group-title">Result</h2>
+          <div class="group">
+            <div class="row file-row">
+              <img class="thumb" id="u-thumb" alt="">
+              <div class="file-text">
+                <div class="file-name" id="u-result-name"></div>
+                <div class="file-meta">
+                  <span id="u-result-meta"></span>
+                  <button class="link is-hidden" id="u-reveal">Show in Finder</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <div class="activity" aria-live="polite">
+            <progress id="u-progress" class="is-hidden" max="1"></progress>
+            <span class="activity-text" id="u-status"></span>
+          </div>
+          <button class="push default" id="u-go" disabled>Upscale</button>
+          <a class="push default is-hidden" id="u-download" href="#" download>Download</a>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <div class="hud" id="hud" role="status" aria-live="polite"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
