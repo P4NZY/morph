@@ -72,6 +72,38 @@ window.__t.stage = 'upscale';
 """
 
 
+JS_COMPRESS = r"""
+window.__t.stage = 'compress';
+(async () => {
+  try {
+    window.switchTab('compress');
+    const c = document.createElement('canvas'); c.width = 1600; c.height = 1000;
+    const g = c.getContext('2d');
+    for (let i = 0; i < 400; i++) { g.fillStyle = `hsl(${i * 37 % 360},60%,${30 + i % 40}%)`; g.fillRect((i * 97) % 1600, (i * 53) % 1000, 120, 90); }
+    const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+    const dt = new DataTransfer(); dt.items.add(new File([blob], 'selftest-big.png', {type: 'image/png'}));
+    document.querySelector('#k-drop').dispatchEvent(new DragEvent('drop', {dataTransfer: dt, bubbles: true, cancelable: true}));
+    await new Promise(r => setTimeout(r, 500));
+    const f = document.querySelector('#k-format'); f.value = 'webp'; f.dispatchEvent(new Event('change'));
+    document.querySelector('#k-go').click();
+    for (let i = 0; i < 300 && document.querySelector('#k-result').classList.contains('is-hidden'); i++) {
+      if (document.querySelector('#k-activity').classList.contains('is-error')) break;
+      await new Promise(r => setTimeout(r, 100));
+    }
+    window.__t.compress = {
+      name: document.querySelector('#k-result-name').textContent,
+      meta: document.querySelector('#k-result-meta').textContent,
+      saving: document.querySelector('#k-saving').textContent,
+      status: document.querySelector('#k-status').textContent,
+      button: document.querySelector('#k-download').textContent,
+    };
+    window.__t.stage = 'compressed';
+  } catch (e) { window.__t.error = String(e); window.__t.stage = 'failed'; }
+})();
+'started'
+"""
+
+
 def _wait_stage(window, stages, timeout):
     end = time.time() + timeout
     while time.time() < end:
@@ -112,6 +144,9 @@ def run(window, outdir: Path) -> None:
 
         window.evaluate_js(JS_UPSCALE)
         report["upscale_state"] = _wait_stage(window, {"done", "failed"}, 120)
+
+        window.evaluate_js(JS_COMPRESS)
+        report["compress_state"] = _wait_stage(window, {"compressed", "failed"}, 90)
     except Exception:
         report["exception"] = traceback.format_exc()
     finally:

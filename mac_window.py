@@ -1,7 +1,7 @@
 """Native macOS window chrome for Morph.
 
 Adds a real AppKit unified toolbar with a centred segmented control
-(Convert | Upscale), like Activity Monitor or Preview. The page below it is
+(Convert | Upscale | Compress), like Activity Monitor or Preview. The page below it is
 told which tool to show; when the page switches tool by itself (keyboard
 shortcut, restored state), it reports back so the toolbar stays in sync.
 """
@@ -15,7 +15,7 @@ import AppKit
 import objc
 from PyObjCTools import AppHelper
 
-TABS = [("convert", "Convert"), ("upscale", "Upscale")]
+TABS = [("convert", "Convert"), ("upscale", "Upscale"), ("compress", "Compress")]
 TOOLBAR_ID = "MorphToolbar"
 TABS_ITEM_ID = "MorphTabs"
 
@@ -46,10 +46,10 @@ class ToolbarController(AppKit.NSObject):
             [label for _, label in TABS], AppKit.NSSegmentSwitchTrackingSelectOne, self, "tabChanged:")
         seg.setSegmentDistribution_(AppKit.NSSegmentDistributionFillEqually)
         seg.setSelectedSegment_(0)
-        seg.setToolTip_("Switch tool (⌘1, ⌘2)")
+        seg.setToolTip_("Switch tool (⌘1, ⌘2, ⌘3)")
         seg.sizeToFit()
         frame = seg.frame()
-        frame.size.width = max(frame.size.width, 200)
+        frame.size.width = max(frame.size.width, 100 * len(TABS))
         seg.setFrame_(frame)
         self.segmented = seg
 

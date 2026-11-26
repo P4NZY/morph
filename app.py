@@ -18,6 +18,7 @@ from werkzeug.exceptions import HTTPException
 from werkzeug.utils import secure_filename
 
 import ai_upscaler
+import compressor
 import converters
 import jobs
 import upscaler
@@ -58,6 +59,12 @@ def _receive_upload() -> tuple[Path, Path, str, str]:
     return workdir, src, ext, _clean_stem(upload.filename)
 
 
+def _clean_name(filename: str) -> str:
+    name = Path(filename.replace("\\", "/")).name
+    name = "".join(c for c in name if c not in '/\\:*?"<>|\0').strip(" ")
+    return name or "file"
+
+
 @app.get("/")
 def index():
     return send_from_directory(app.static_folder, "index.html")
@@ -68,7 +75,40 @@ def formats():
     data = converters.formats_for_client()
     data["presets"] = upscaler.PRESETS
     data["maxOutputPixels"] = upscaler.MAX_OUTPUT_PIXELS
+    data["compress"] = compressor.client_info()
     return jsonify(data)
+
+
+@app.post("/api/compress")
+def compress():
+    """Start a compression job for one file (or several, which become one ZIP)."""
+    uploads = [u for u in request.files.getlist("file") if u and u.filename]
+    if not uploads:
+        raise ConversionError("No file was uploaded.")
+    settings = compressor.Settings.from_form(request.form)
+
+    workdir = Path(tempfile.mkdtemp(prefix="morph-"))  # owned by the job from here on
+    files = []
+    try:
+        for i, upload in enumerate(uploads):
+            name = _clean_name(upload.filename)
+            ext = normalize_ext(Path(name).suffix) or "bin"
+            src = workdir / "in" / f"{i:04d}.{ext}"
+            src.parent.mkdir(exist_ok=True)
+            upload.save(src)
+            files.append((src, name))
+    except Exception:
+        shutil.rmtree(workdir, ignore_errors=True)
+        raise
+
+    def work(job: jobs.Job):
+        out, info = compressor.compress(files, settings, workdir / "out", job.report)
+        job.result_path = out
+        job.filename = out.name
+        job.meta = info
+        job.report(1.0, "Done")
+
+    return jsonify(job=jobs.start(work, workdir=workdir).id)
 
 
 @app.post("/api/convert")
@@ -131,14 +171,31 @@ def job_status(job_id):
     return jsonify(job.public())
 
 
+@app.delete("/api/jobs/<job_id>")
+def job_discard(job_id):
+    """The page doesn't want this result (e.g. compression didn't help): free it now."""
+    job = jobs.pop(job_id)
+    if job is not None:
+        job.discard_files()
+    return jsonify(ok=True)
+
+
 @app.get("/api/jobs/<job_id>/result")
 def job_result(job_id):
     job = jobs.get(job_id)
-    if job is None or job.status != "done" or job.result is None:
+    if job is None or job.status != "done" or (job.result is None and job.result_path is None):
         return jsonify(error="That result isn't available any more."), 404
     jobs.pop(job_id)
-    resp = send_file(io.BytesIO(job.result), as_attachment=True,
-                     download_name=job.filename, mimetype=job.mimetype)
+    if job.result_path is not None:
+        resp = send_file(job.result_path, as_attachment=True, download_name=job.filename)
+
+        @after_this_request
+        def _discard(response):
+            job.discard_files()  # the open file is still sent; the folder entry goes now
+            return response
+    else:
+        resp = send_file(io.BytesIO(job.result), as_attachment=True,
+                         download_name=job.filename, mimetype=job.mimetype)
     resp.headers["X-Output-Width"] = str(job.meta.get("width", ""))
     resp.headers["X-Output-Height"] = str(job.meta.get("height", ""))
     return resp

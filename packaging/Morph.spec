@@ -8,7 +8,7 @@ ROOT = Path(SPECPATH).parent
 
 datas = [(str(ROOT / "static"), "static"), (str(ROOT / "filters"), "filters")]
 binaries = []
-hiddenimports = ["selftest", "ai_upscaler", "jobs", "upscaler", "converters", "mac_window"]
+hiddenimports = ["selftest", "ai_upscaler", "jobs", "upscaler", "converters", "mac_window", "compressor"]
 
 # Packages that ship binaries (pandoc, ffmpeg, libheif) or data files PyInstaller can't see.
 for pkg in ["pypandoc", "imageio_ffmpeg", "pymupdf", "pymupdf4llm", "spandrel",
