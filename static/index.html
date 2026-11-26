@@ -15,6 +15,7 @@
     <div class="segmented" id="web-tabs" role="tablist" aria-label="Tool">
       <button role="tab" data-tab="convert" aria-selected="true" class="is-on">Convert</button>
       <button role="tab" data-tab="upscale" aria-selected="false">Upscale</button>
+      <button role="tab" data-tab="compress" aria-selected="false">Compress</button>
     </div>
     <div class="web-toolbar-end"></div>
   </header>
@@ -187,7 +188,7 @@
           </label>
           <label class="row" id="u-sharpen-row">
             <span class="row-label">Sharpen details</span>
-            <input type="checkbox" id="u-sharpen" checked>
+            <input type="checkbox" id="u-sharpen" switch checked>
           </label>
           <div class="row model-row is-hidden" id="u-model">
             <div class="model-text">
@@ -238,6 +239,107 @@
           <a class="push default is-hidden" id="u-download" href="#" download>Download</a>
         </div>
       </aside>
+    </section>
+
+    <!-- ============================== COMPRESS ============================== -->
+    <section class="panel convert" id="panel-compress" role="tabpanel" aria-label="Compress">
+      <div class="convert-column is-empty" id="k-column">
+
+        <div class="dropzone" id="k-drop">
+          <svg class="dropzone-symbol" viewBox="0 0 48 48" aria-hidden="true">
+            <rect x="8.5" y="8.5" width="31" height="31" rx="5" fill="none" stroke="currentColor" stroke-width="2"/>
+            <path d="M14.5 14.5l7 7m0 0v-5m0 5h-5M33.5 33.5l-7-7m0 0v5m0-5h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <h1 class="dropzone-title">Drop files to compress</h1>
+          <p class="dropzone-text">Images, PDFs, videos, audio and Office documents.<br>Other files, or several at once, are packed into a ZIP.</p>
+          <button class="push" id="k-choose">Choose Files…</button>
+          <input type="file" id="k-input" multiple hidden>
+        </div>
+
+        <div class="form is-hidden" id="k-form">
+          <h2 class="group-title">Source</h2>
+          <div class="group">
+            <div class="row file-row">
+              <span class="doc-icon" id="k-src-icon" aria-hidden="true"></span>
+              <div class="file-text">
+                <div class="file-name" id="k-name"></div>
+                <div class="file-meta" id="k-meta"></div>
+              </div>
+              <button class="push small" id="k-change">Choose…</button>
+            </div>
+          </div>
+
+          <h2 class="group-title">Compression</h2>
+          <div class="group">
+            <label class="row" id="k-level-row">
+              <span class="row-label">Quality</span>
+              <select id="k-level">
+                <option value="small">Smaller File</option>
+                <option value="balanced" selected>Balanced</option>
+                <option value="high">Higher Quality</option>
+              </select>
+            </label>
+            <label class="row" id="k-format-row">
+              <span class="row-label">Format</span>
+              <select id="k-format"></select>
+            </label>
+            <label class="row" id="k-size-row">
+              <span class="row-label">Maximum Size</span>
+              <select id="k-max-side">
+                <option value="0">Original Size</option>
+                <option value="3840">3840 pixels (4K)</option>
+                <option value="2560">2560 pixels</option>
+                <option value="1920">1920 pixels (Full HD)</option>
+                <option value="1280">1280 pixels</option>
+              </select>
+            </label>
+            <label class="row" id="k-res-row">
+              <span class="row-label">Resolution</span>
+              <select id="k-resolution">
+                <option value="0">Original</option>
+                <option value="1080">1080p</option>
+                <option value="720">720p</option>
+                <option value="480">480p</option>
+              </select>
+            </label>
+            <label class="row" id="k-strip-row">
+              <span class="row-label" id="k-strip-label">Remove location and camera details</span>
+              <input type="checkbox" id="k-strip" switch checked>
+            </label>
+            <div class="row" id="k-zip-row">
+              <span class="row-label">Method</span>
+              <span class="row-value">ZIP archive, lossless</span>
+            </div>
+          </div>
+          <p class="footnote" id="k-note"></p>
+
+          <div class="is-hidden" id="k-result">
+            <h2 class="group-title">Result</h2>
+            <div class="group">
+              <div class="row file-row">
+                <span class="doc-icon" id="k-out-icon" aria-hidden="true"></span>
+                <div class="file-text">
+                  <div class="file-name" id="k-result-name"></div>
+                  <div class="file-meta">
+                    <span id="k-result-meta"></span>
+                    <button class="link is-hidden" id="k-reveal">Show in Finder</button>
+                  </div>
+                </div>
+                <span class="saving" id="k-saving"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="actions">
+            <div class="activity" id="k-activity" aria-live="polite">
+              <progress id="k-progress" class="is-hidden" max="1"></progress>
+              <span class="activity-text" id="k-status"></span>
+            </div>
+            <button class="push default" id="k-go">Compress</button>
+            <a class="push default is-hidden" id="k-download" href="#" download>Download</a>
+          </div>
+        </div>
+      </div>
     </section>
   </main>
 

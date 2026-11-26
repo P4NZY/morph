@@ -1,7 +1,7 @@
-# Morph — local file converter & image upscaler
+# Morph — local file converter, compressor & image upscaler
 
-A small web app that runs on your Mac. Upload a file, pick a format, download the result.
-Nothing is sent to the internet.
+A small Mac app for everyday file chores: convert between formats, make files smaller, and
+upscale images. Everything runs on your Mac; nothing is sent to the internet.
 
 ## Start it
 
@@ -10,8 +10,8 @@ needed. Close the window to quit. The app is self-contained, so you can keep it 
 Applications, on the Desktop, or in the Dock. When you click **Save…**, the normal macOS Save
 dialog opens.
 
-Keyboard: **⌘1** Convert, **⌘2** Upscale, **⌘O** choose a file, **⌘S** save the result,
-**Return** presses the blue button. You can drop a file anywhere in the window.
+Keyboard: **⌘1** Convert, **⌘2** Upscale, **⌘3** Compress, **⌘O** choose a file, **⌘S** save
+the result, **Return** presses the blue button. You can drop a file anywhere in the window.
 
 To rebuild the app after changing the code: `packaging/build_app.sh` (output:
 `packaging/dist/Morph.app`). `packaging/snapshot.py <folder> [image]` takes light and dark
@@ -37,6 +37,20 @@ Then open <http://127.0.0.1:8765>. Press `Ctrl+C` in the terminal to stop it.
 | **Data**: CSV, TSV, XLSX, JSON | XLSX, CSV, TSV, JSON, HTML, Markdown, PDF |
 | **Audio**: MP3, WAV, OGG, FLAC, M4A, AAC, Opus, AIFF, WMA | MP3, WAV, OGG, FLAC, M4A, Opus, AIFF |
 | **Video**: MP4, MOV, WebM, AVI, MKV, M4V, FLV, WMV, MPEG, 3GP | MP4, MOV, WebM, AVI, MKV, GIF, MP3, WAV, M4A |
+
+## Compressor
+
+Pick **Smaller File**, **Balanced** or **Higher Quality**; Morph shows the new size and how much
+was saved. If a file can't get any smaller, it says so instead of giving you a bigger copy.
+
+| File | What Morph does | Options |
+|---|---|---|
+| **Images**: JPEG, PNG, HEIC, WebP, AVIF, GIF, TIFF, BMP | Re-encodes at a lower quality; PNGs get a 256-colour palette (like pngquant) | Format (e.g. PNG → WebP), maximum size, remove location and camera details |
+| **PDF** | Resamples and recompresses the pictures inside (96 / 150 / 220 dpi); text stays sharp | Remove document info |
+| **Video**: MP4, MOV, MKV, WebM, AVI, … | H.264 at a lower quality, with a progress bar | Resolution (1080p / 720p / 480p), remove location |
+| **Audio**: MP3, M4A, OGG, Opus, WAV, AIFF, FLAC | Lower bitrate; WAV/AIFF/FLAC become M4A, MP3 or lossless FLAC | Format, remove tags |
+| **Word, PowerPoint, Excel, OpenDocument, EPUB** | Shrinks the pictures inside; text and layout are untouched | |
+| **Anything else, or several files at once** | Packs them into a ZIP archive (lossless) | |
 
 ## Upscaler
 
@@ -80,16 +94,17 @@ Output is capped at 120 megapixels.
 
 - `app.py`: web server (Flask)
 - `converters.py`: all conversion logic and the format table
+- `compressor.py`: compression for images, PDFs, video, audio, Office files and ZIP
 - `upscaler.py`: image upscaling (sizes, presets, Standard method)
 - `ai_upscaler.py`: Real-ESRGAN AI upscaling, model download, tiled GPU inference
-- `jobs.py`: background jobs so long upscales can report progress
+- `jobs.py`: background jobs so long tasks (upscaling, video) can report progress
 - `desktop.py`: the Morph.app entry point (native window via pywebview)
-- `mac_window.py`: the native macOS toolbar (Convert | Upscale) and Show in Finder
+- `mac_window.py`: the native macOS toolbar (Convert | Upscale | Compress) and Show in Finder
 - `selftest.py`: automated end-to-end test of the app window (`MORPH_SELFTEST=<dir>`)
+- `static/`: the page shown in the window (HTML/CSS/JS)
+- `filters/title_to_heading.lua`: pandoc filter that keeps document titles visible
 - `packaging/`: app icon (built from `icon-art.webp` by `make_icon.py`), PyInstaller recipe
   (`Morph.spec`) and `build_app.sh`
 
 AI models live in `~/Library/Application Support/Morph/models`, shared by the app and
 `start.command`.
-- `static/`: the web page (HTML/CSS/JS)
-- `filters/title_to_heading.lua`: pandoc filter that keeps document titles visible

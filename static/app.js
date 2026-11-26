@@ -3,7 +3,7 @@
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
-const app = { formats: {}, kinds: {}, aliases: {}, presets: [], maxPixels: 120e6, ai: null };
+const app = { formats: {}, kinds: {}, aliases: {}, presets: [], maxPixels: 120e6, ai: null, compress: null };
 
 /* ================================================================== helpers */
 
@@ -161,20 +161,27 @@ async function pollJob(id, onProgress) {
 
 const nativeApi = () => window.pywebview?.api;
 let currentTab = "convert";
-let lastSave = null;  // which result the last Save… came from
+let lastSave = null;  // which tool the last Save… came from
+
+// The three tools, in toolbar order. Scopes are looked up lazily (they're defined further down).
+const TOOLS = {
+  convert: { scope: () => C, open: (files) => onConvertFile(files[0]), label: "Convert" },
+  upscale: { scope: () => U, open: (files) => onUpscaleFile(files[0]), label: "Upscale" },
+  compress: { scope: () => K, open: (files) => onCompressFiles(files), label: "Compress" },
+};
+const TOOL_ORDER = Object.keys(TOOLS);
 
 function enterDesktopMode() {
   const root = document.documentElement;
   if (root.classList.contains("desktop")) return;
   root.classList.add("desktop");
-  C.download.textContent = "Save…";
-  U.download.textContent = "Save…";
+  [C, U, K].forEach((scope) => { scope.download.textContent = "Save…"; });
   nativeApi()?.tab_changed?.(currentTab);
 }
 
 // Called by Morph.app once a Save… has finished writing the file.
 window.morphSaved = (path, folder) => {
-  const scope = lastSave === "upscale" ? U : C;
+  const scope = TOOLS[lastSave]?.scope() || C;
   scope.resultMeta.textContent = `Saved to ${folder}`;
   scope.reveal.dataset.path = path;
   show(scope.reveal, true);
@@ -188,7 +195,7 @@ function revealSaved(scope) {
 /* ==================================================================== tabs */
 
 function switchTab(name, opts = {}) {
-  if (name !== "convert" && name !== "upscale") return;
+  if (!TOOLS[name]) return;
   currentTab = name;
   $$(".panel").forEach((p) => p.classList.toggle("is-active", p.id === `panel-${name}`));
   $$("#web-tabs button").forEach((b) => {
@@ -196,7 +203,7 @@ function switchTab(name, opts = {}) {
     b.classList.toggle("is-on", on);
     b.setAttribute("aria-selected", String(on));
   });
-  $("#drop-overlay-text").textContent = name === "convert" ? "Drop to Convert" : "Drop to Upscale";
+  $("#drop-overlay-text").textContent = `Drop to ${TOOLS[name].label}`;
   savePref("tab", name);
   if (!opts.fromNative) nativeApi()?.tab_changed?.(name);
   if (name === "upscale") requestAnimationFrame(layoutStage);
@@ -207,11 +214,11 @@ $$("#web-tabs button").forEach((b) => b.addEventListener("click", () => switchTa
 /* ===================================================== keyboard & dropping */
 
 document.addEventListener("keydown", (e) => {
-  const scope = currentTab === "convert" ? C : U;
+  const scope = TOOLS[currentTab].scope();
   if (e.metaKey && !e.altKey && !e.ctrlKey) {
     const key = e.key.toLowerCase();
-    if (key === "1" || key === "2") {
-      switchTab(key === "1" ? "convert" : "upscale");
+    if (["1", "2", "3"].includes(key)) {
+      switchTab(TOOL_ORDER[+key - 1]);
     } else if (key === "o") {
       if (!scope.busy()) scope.input.click();
     } else if (key === "s") {
@@ -249,8 +256,8 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
     depth = 0;
     document.body.classList.remove("is-dragging");
-    const file = e.dataTransfer?.files?.[0];
-    if (file) (currentTab === "convert" ? onConvertFile : onUpscaleFile)(file);
+    const files = [...(e.dataTransfer?.files || [])];
+    if (files.length) TOOLS[currentTab].open(files);
   });
 })();
 
@@ -815,6 +822,202 @@ function layoutCompare(recentre = false) {
   });
 })();
 
+/* ================================================================ compress */
+
+const comp = { files: [], kind: "", ext: "", url: null, busy: false };
+const K = {
+  drop: $("#k-drop"), choose: $("#k-choose"), input: $("#k-input"), form: $("#k-form"), column: $("#k-column"),
+  srcIcon: $("#k-src-icon"), name: $("#k-name"), meta: $("#k-meta"), change: $("#k-change"),
+  level: $("#k-level"), levelRow: $("#k-level-row"), format: $("#k-format"), formatRow: $("#k-format-row"),
+  maxSide: $("#k-max-side"), sizeRow: $("#k-size-row"), resolution: $("#k-resolution"), resRow: $("#k-res-row"),
+  strip: $("#k-strip"), stripRow: $("#k-strip-row"), stripLabel: $("#k-strip-label"), zipRow: $("#k-zip-row"),
+  note: $("#k-note"),
+  activity: $("#k-activity"), progress: $("#k-progress"), status: $("#k-status"), go: $("#k-go"),
+  result: $("#k-result"), outIcon: $("#k-out-icon"), resultName: $("#k-result-name"),
+  resultMeta: $("#k-result-meta"), reveal: $("#k-reveal"), saving: $("#k-saving"), download: $("#k-download"),
+  busy: () => comp.busy,
+};
+const K_CONTROLS = [K.go, K.level, K.format, K.maxSide, K.resolution, K.strip, K.change];
+
+const COMPRESS_FORMAT_NAMES = {
+  jpg: "JPEG", png: "PNG", webp: "WebP", heic: "HEIC", avif: "AVIF", gif: "GIF", tiff: "TIFF",
+  m4a: "M4A (AAC)", mp3: "MP3", flac: "FLAC (Lossless)",
+};
+
+// What "Remove metadata" means for each kind, and whether it's on by default.
+// Photos and videos can carry your location; music tags are usually worth keeping.
+const STRIP = {
+  image: ["Remove location and camera details", true],
+  video: ["Remove location and other metadata", true],
+  audio: ["Remove tags (title, artist, album)", false],
+  pdf: ["Remove document info (title, author)", false],
+};
+
+function compressKind(ext) {
+  const c = app.compress;
+  if (c.imageFormats[ext]) return "image";
+  if (ext === "pdf") return "pdf";
+  if (c.videoIn.includes(ext)) return "video";
+  if (c.audioLossy[ext] || c.audioLossless[ext]) return "audio";
+  if (c.officeIn.includes(ext)) return "office";
+  return "archive";
+}
+
+async function onCompressFiles(fileList) {
+  if (comp.busy || !fileList.length) return;
+  await formatsReady;
+  comp.files = [...fileList];
+  const single = comp.files.length === 1;
+  comp.ext = single ? extOf(comp.files[0].name) : "zip";
+  comp.kind = single ? compressKind(comp.ext) : "archive";
+  const total = comp.files.reduce((n, f) => n + f.size, 0);
+
+  show(K.drop, false);
+  show(K.form, true);
+  K.column.classList.remove("is-empty");
+  K.srcIcon.innerHTML = docIcon(single ? comp.ext : "zip");
+  if (single) {
+    K.name.textContent = comp.files[0].name;
+    K.meta.textContent = `${fmtBytes(total)} · ${comp.ext ? formatName(comp.ext) : "Document"}`;
+  } else {
+    K.name.textContent = `${comp.files.length} Files`;
+    const names = comp.files.slice(0, 3).map((f) => f.name).join(", ");
+    K.meta.textContent = `${fmtBytes(total)} · ${names}${comp.files.length > 3 ? ", …" : ""}`;
+  }
+
+  K.format.replaceChildren();
+  const options = comp.kind === "image" ? app.compress.imageFormats[comp.ext]
+    : comp.kind === "audio" ? app.compress.audioLossless[comp.ext] : null;
+  if (options) {
+    options.forEach((f, i) => {
+      const same = comp.kind === "image" && i === 0 && f === comp.ext;
+      K.format.append(new Option(same ? `${COMPRESS_FORMAT_NAMES[f]} (Same as Original)` : COMPRESS_FORMAT_NAMES[f], f));
+    });
+    const remembered = loadPref(`compress.format.${comp.ext}`, null);
+    K.format.value = options.includes(remembered) ? remembered : options[0];
+  }
+  if (STRIP[comp.kind]) {
+    K.stripLabel.textContent = STRIP[comp.kind][0];
+    K.strip.checked = STRIP[comp.kind][1];
+  }
+  setResult(K, false);
+  setActivity(K);
+  renderCompress();
+}
+
+function compressNote() {
+  const level = K.level.value, fmt = K.format.value, ext = comp.ext;
+  switch (comp.kind) {
+    case "image":
+      if (fmt === "png") return level === "high"
+        ? "Keeps the PNG lossless, so the saving is modest. WebP or JPEG is much smaller for photos."
+        : "Reduces the PNG to at most 256 colours, like pngquant. For photos, WebP or JPEG is usually far smaller.";
+      if (fmt === "webp") return "WebP is usually much smaller than JPEG or PNG and opens in Preview, Safari and most apps.";
+      if (fmt === "heic") return "HEIC is already efficient (it's what iPhones use), so the saving is smaller. JPEG works everywhere.";
+      if (fmt === "avif") return "AVIF is already efficient, so the saving may be small.";
+      if (fmt === "gif") return "GIF is limited to 256 colours. WebP keeps the animation and is much smaller.";
+      if (fmt === "tiff") return "TIFF stays lossless. Choose JPEG or WebP for a much smaller file.";
+      if (ext !== "jpg") return "JPEG has no transparency, so any transparent areas become white.";
+      return "Saves the JPEG at a lower quality. WebP gives an even smaller file.";
+    case "pdf":
+      return `Pictures are resampled to ${{ small: 96, balanced: 150, high: 220 }[level]} dpi and recompressed. Text stays sharp and selectable.`;
+    case "video":
+      return "Re-encodes as H.264, which plays everywhere. Long videos can take a few minutes.";
+    case "audio": {
+      if (fmt === "flac") return "FLAC is lossless: the sound is identical and the file is about half the size.";
+      const kbps = (ext === "opus" ? { small: 64, balanced: 96, high: 128 } : { small: 96, balanced: 128, high: 192 })[level];
+      return app.compress.audioLossless[ext]
+        ? `Encodes at ${kbps} kbps, which sounds close to the original at a fraction of the size.`
+        : `Re-encodes at ${kbps} kbps.`;
+    }
+    case "office":
+      return "Shrinks the pictures inside the document. Text and layout don't change.";
+    default:
+      return comp.files.length > 1
+        ? "The files are packed into one ZIP archive. Nothing is lost."
+        : "This kind of file is packed into a ZIP archive. Nothing is lost; text and data shrink a lot, files that are already compressed won't.";
+  }
+}
+
+function renderCompress() {
+  const kind = comp.kind;
+  show(K.levelRow, kind !== "archive");
+  show(K.formatRow, K.format.options.length > 0);
+  show(K.sizeRow, kind === "image");
+  show(K.resRow, kind === "video");
+  show(K.stripRow, !!STRIP[kind]);
+  show(K.zipRow, kind === "archive");
+  K.note.textContent = compressNote();
+  K.go.disabled = comp.busy || !comp.files.length;
+}
+
+function compressOptionChanged() {
+  if (K.format.value) savePref(`compress.format.${comp.ext}`, K.format.value);
+  setResult(K, false);
+  setActivity(K);
+  renderCompress();
+}
+
+async function compressNow() {
+  if (!comp.files.length || comp.busy) return;
+  comp.busy = true;
+  K_CONTROLS.forEach((el) => { el.disabled = true; });
+  setResult(K, false);
+
+  const fd = new FormData();
+  comp.files.forEach((f) => fd.append("file", f));
+  fd.append("level", K.level.value);
+  fd.append("format", K.format.value || "same");
+  fd.append("max_side", K.maxSide.value);
+  fd.append("resolution", K.resolution.value);
+  fd.append("strip_metadata", K.strip.checked ? "1" : "0");
+  try {
+    const started = await send("/api/compress", fd, (phase, p) => {
+      if (phase === "upload") setActivity(K, "Reading file…", p);
+      else setActivity(K, "Starting…", null);
+    });
+    const { job } = JSON.parse(await started.blob.text());
+    const done = await pollJob(job, (j) => setActivity(K, j.message, j.progress > 0 ? j.progress : null));
+
+    if (!done.smaller) {
+      fetch(`/api/jobs/${job}`, { method: "DELETE" });
+      setActivity(K, "This is already as small as it gets. Morph couldn't make it any smaller.");
+      return;
+    }
+    const res = await fetch(`/api/jobs/${job}/result`);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Couldn't get the result.");
+    const blob = await res.blob();
+    const filename = filenameFromHeader(res.headers.get("Content-Disposition"), done.filename || "compressed");
+
+    if (comp.url) URL.revokeObjectURL(comp.url);
+    comp.url = URL.createObjectURL(blob);
+    K.outIcon.innerHTML = docIcon(extOf(filename));
+    K.resultName.textContent = filename;
+    K.resultMeta.textContent = `${fmtBytes(done.size)} · was ${fmtBytes(done.original)}`;
+    const pct = Math.round((1 - done.size / done.original) * 100);
+    K.saving.textContent = pct >= 1 ? `${pct}% smaller` : "Slightly smaller";
+    K.download.href = comp.url;
+    K.download.download = filename;
+    show(K.reveal, false);
+    setResult(K, true);
+    setActivity(K);
+  } catch (err) {
+    setActivity(K, err.message, undefined, true);
+  } finally {
+    comp.busy = false;
+    K_CONTROLS.forEach((el) => { el.disabled = false; });
+    renderCompress();
+  }
+}
+
+[K.level, K.format, K.maxSide, K.resolution, K.strip].forEach((el) => el.addEventListener("change", compressOptionChanged));
+K.go.addEventListener("click", compressNow);
+K.choose.addEventListener("click", () => K.input.click());
+K.change.addEventListener("click", () => { if (!comp.busy) K.input.click(); });
+K.input.addEventListener("change", () => { if (K.input.files.length) onCompressFiles([...K.input.files]); K.input.value = ""; });
+K.download.addEventListener("click", () => { lastSave = "compress"; });
+K.reveal.addEventListener("click", () => revealSaved(K));
+
 /* ==================================================================== boot */
 
 if (window.pywebview) enterDesktopMode();
@@ -832,6 +1035,7 @@ const formatsReady = fetch("/api/formats")
     app.aliases = data.aliases;
     app.presets = data.presets;
     app.maxPixels = data.maxOutputPixels;
+    app.compress = data.compress;
     buildPresetMenu();
     renderMatrix();
     renderUpscale();

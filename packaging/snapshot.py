@@ -105,6 +105,18 @@ def driver(window, out: Path, image: Path | None) -> None:
             wait_js(window, "!document.querySelector('#c-result').classList.contains('is-hidden')", 30)
             capture(window, out / f"convert-done-{mode}.png")
 
+            js(window, "window.switchTab('compress'); 'ok'")
+            time.sleep(0.4)
+            capture(window, out / f"compress-empty-{mode}.png")
+            if img_b64:
+                drop(window, "#k-drop", image.name, "image/jpeg", img_b64)
+                time.sleep(0.8)
+                capture(window, out / f"compress-file-{mode}.png")
+                js(window, "document.querySelector('#k-go').click(); 'ok'")
+                wait_js(window, "!document.querySelector('#k-result').classList.contains('is-hidden') || "
+                                "document.querySelector('#k-status').textContent.length > 20", 60)
+                capture(window, out / f"compress-done-{mode}.png")
+
             js(window, "window.switchTab('upscale'); 'ok'")
             time.sleep(0.4)
             capture(window, out / f"upscale-empty-{mode}.png")
